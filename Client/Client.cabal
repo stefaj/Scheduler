@@ -18,7 +18,9 @@ cabal-version:       >=1.10
 
 executable Client
   main-is:             Main.hs
-  -- other-modules:       
+  other-modules:       Client
+                       ,Server
+                       ,Job
   -- other-extensions:    
   build-depends:       base >=4.9 && <4.10
                        ,distributed-process
