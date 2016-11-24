@@ -23,6 +23,7 @@ executable Client
   build-depends:       base >=4.9 && <4.10
                        ,distributed-process
                        ,network-transport-tcp
+                       ,network-transport
                        ,binary
                        ,Shared
                        ,bytestring
