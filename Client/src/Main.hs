@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Main where
 
@@ -24,34 +25,9 @@ import Control.Distributed.Process.Closure
 import Control.Distributed.Process.Node (initRemoteTable, runProcess)
 import Control.Distributed.Process.Backend.SimpleLocalnet
 
-data StartProcess = StartProcess {procName :: String, procParams :: [String]}
-  deriving (Show, Generic)
-
-instance Binary StartProcess
-
-startProcess :: String -> [String] -> IO String
-startProcess name args = do
-   (_,mOut,mErr,procHandle) <- P.createProcess $ 
-        (P.proc name args) { P.std_out = P.CreatePipe
-                                , P.std_err = P.CreatePipe 
-                                }
-   let (hOut,hErr) = maybe (error "bogus handles") 
-                           id
-                           ((,) <$> mOut <*> mErr)
-   exitCode <- timeout 1000000 $ P.waitForProcess procHandle
-   sOut <- hGetContents hOut
-   P.terminateProcess procHandle
-   return sOut
-
-handleStartProcess backend (StartProcess name args) = do
-  res <- liftIO $ startProcess name args
-  sendMaster backend res
-
-logSlaveMessage :: String -> Process ()
-logSlaveMessage msg = say $ "Slave: handling " ++ msg
-
-logMasterMessage :: String -> Process ()
-logMasterMessage msg = say $ "Master: handling " ++ msg
+import Client
+import Server
+import Job
 
 main = do
   [host, port, typ] <- getArgs
@@ -65,47 +41,3 @@ main = do
     "client" -> do   
       node <- newLocalNode backend
       runProcess node (slave backend)
-
-sendMaster backend msg = do
-  m <- findMaster backend 
-  send m msg
-
-findMaster :: Backend -> Process ProcessId
-findMaster backend = do
-  nodes <- liftIO $ findPeers backend 1000000
-  bracket
-   (mapM monitorNode nodes)
-   (mapM unmonitor)
-   $ \_ -> do
-   forM_ nodes $ \nid -> whereisRemoteAsync nid "master"
-   head <$> catMaybes <$> replicateM (length nodes) (
-     receiveWait
-       [ match (\(WhereIsReply "master" mPid) -> return mPid)
-       , match (\(NodeMonitorNotification {}) -> return Nothing)
-       ])
-
-  
-master backend = do
-  pid <- getSelfPid
-  register "master" pid
-  forever $ do
-    liftIO $ putStrLn "Finding slaves"
-    slaves <- findSlaves backend 
-    liftIO $ putStrLn "Input command to run"
-    prog:args <- liftIO $ words <$> getLine
-    -- redirectLogsHere backend slaves
-    liftIO $ putStrLn $ "Found " ++ (show $ length slaves) ++ " slaves"
-    forM_ slaves $ \peer -> send peer $ StartProcess prog args
-    liftIO $ putStrLn $ "Reading msg"
-    receiveWait ([match logMasterMessage])
-    liftIO $ threadDelay 1000000
-    
-
-slave backend = do
-  pid <- getSelfPid
-  register "slaveController" pid
-  forever $ do
-    liftIO $ putStrLn $ "Waiting for message"
-    receiveWait ([match logSlaveMessage, match (handleStartProcess backend) ])
-    liftIO $ putStrLn $ "Waiting for next cycle"
-    liftIO $ threadDelay 100000
