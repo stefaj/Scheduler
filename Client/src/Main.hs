@@ -92,13 +92,13 @@ master backend = do
     liftIO $ putStrLn "Finding slaves"
     slaves <- findSlaves backend 
     liftIO $ putStrLn "Input command to run"
-    -- str <- liftIO $ words <$> getLine
+    prog:args <- liftIO $ words <$> getLine
     -- redirectLogsHere backend slaves
     liftIO $ putStrLn $ "Found " ++ (show $ length slaves) ++ " slaves"
-    forM_ slaves $ \peer -> send peer $ StartProcess "ls" []  -- (head str) (tail str)
+    forM_ slaves $ \peer -> send peer $ StartProcess prog args
     liftIO $ putStrLn $ "Reading msg"
     receiveWait ([match logMasterMessage])
-    liftIO $ threadDelay 10000000
+    liftIO $ threadDelay 1000000
     
 
 slave backend = do
@@ -108,4 +108,4 @@ slave backend = do
     liftIO $ putStrLn $ "Waiting for message"
     receiveWait ([match logSlaveMessage, match (handleStartProcess backend) ])
     liftIO $ putStrLn $ "Waiting for next cycle"
-    liftIO $ threadDelay 10000000
+    liftIO $ threadDelay 100000
