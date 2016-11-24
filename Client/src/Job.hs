@@ -16,7 +16,7 @@ type JobId = Int
 data Job = ProcessJob {pjJobId :: JobId, pjProcName :: String, pjProcParams :: [String]}
   deriving (Show, Typeable, Generic)
 
-data Msg = StartProcess {mProcName :: String, mProcParams :: [String]} 
+data Msg = StartProcess {mjobId :: JobId, mProcName :: String, mProcParams :: [String]} 
          | GetCurrentProcessTime
          | GetCurrentProcessName
          | GetCurrentStdout

@@ -8,6 +8,7 @@ module Server (
   )
   where
 
+import Control.Concurrent.MVar
 import Control.Concurrent (threadDelay, forkIO)
 import Control.Monad (forever)
 -- import Control.Distributed.Process
@@ -41,6 +42,7 @@ logResult (StdOutRes jobId cont) = say $ "Master: Retreiving stdout for job " <>
 master backend = do
   pid <- getSelfPid
   register "master" pid
+  mJobCount <- liftIO $ newMVar (0 :: Int)
   forever $ do
     liftIO $ putStrLn "Finding slaves"
     slaves <- findSlaves backend 
@@ -56,12 +58,18 @@ master backend = do
       "5" -> forM_ slaves $ \peer -> send peer $ GetQueue
       "6" -> do 
               liftIO $ putStrLn "Input command to run"
+              jobId <- liftIO $ takeMVar mJobCount
+              let jobId' = jobId + 1
+              liftIO $ putMVar mJobCount jobId'
               prog:args <- liftIO $ words <$> getLine
-              forM_ slaves $ \peer -> send peer $ StartProcess prog args
+              forM_ slaves $ \peer -> send peer $ StartProcess jobId' prog args
       "7" -> do 
               liftIO $ putStrLn "Enter filename to be read"
+              jobId <- liftIO $ takeMVar mJobCount
+              let jobId' = jobId + 1
+              liftIO $ putMVar mJobCount jobId'
               filename <- liftIO getLine
-              forM_ slaves $ \peer -> send peer $ StartProcess "cat" [filename]
+              forM_ slaves $ \peer -> send peer $ StartProcess jobId' "cat" [filename]
       "8" -> do
               liftIO $ putStrLn "Enter job id"
               jid <- liftIO $ read <$> getLine

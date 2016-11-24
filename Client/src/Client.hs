@@ -42,16 +42,15 @@ data CurrentState = CurrentState {csStartTime :: Double
                                  ,csJobCounter :: JobId
                                  ,csQueue :: S.Seq Job} 
 
-startProcess :: MVar CurrentState -> String -> [String] -> IO JobId
-startProcess mState name args = do
+startProcess :: MVar CurrentState -> JobId -> String -> [String] -> IO JobId
+startProcess mState jobid name args = do
    state <- takeMVar mState
-   let newJobId = 1 + (csJobCounter state)
-   let queue' = (csQueue state) S.|> (ProcessJob newJobId name args)
-   putMVar mState $ state {csQueue = queue', csJobCounter = newJobId}
-   return newJobId
+   let queue' = (csQueue state) S.|> (ProcessJob jobid name args)
+   putMVar mState $ state {csQueue = queue', csJobCounter = jobid}
+   return jobid
 
-handleMsgs mState backend (StartProcess name args) = do
-  newId <- liftIO $ startProcess mState name args
+handleMsgs mState backend (StartProcess jobid name args) = do
+  newId <- liftIO $ startProcess mState jobid name args
   sendMaster backend $ StartRes newId
 
 handleMsgs mState backend (GetStdOut jobid) = do
