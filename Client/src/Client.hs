@@ -79,6 +79,32 @@ slave backend = do
   pid <- getSelfPid
   register "slaveController" pid
   mState <- liftIO $ newMVar $ CurrentState 0 Nothing Nothing 0 Completed 0 S.empty
+
+  -- Handle queue
+  liftIO $ forkIO $ forever $ do
+    threadDelay 1000000
+    state <- takeMVar mState
+    putMVar mState state
+    case S.viewl (csQueue state) of
+      S.EmptyL -> return ()
+      (ProcessJob pid pname pargs) S.:< seq -> do
+        initializeTime
+        t <- getTime
+        (_,mOut,mErr,procHandle) <- P.createProcess $ 
+             (P.proc pname pargs) { P.std_out = P.CreatePipe
+                                     , P.std_err = P.CreatePipe 
+                                     }
+        let (hOut,hErr) = maybe (error "bogus handles") 
+                                id
+                                ((,) <$> mOut <*> mErr)
+        _ <- takeMVar mState
+        putMVar mState $ state {csStartTime = t, csCurProcHand = Just procHandle
+                               ,csStdoutHand = Just hOut, csJobId = pid
+                               ,csJobState = Running, csQueue = seq}
+        exitCode <- P.waitForProcess procHandle
+        state' <- takeMVar mState
+        putMVar mState $ state' {csJobState = Completed}
+    
   forever $ do
     liftIO $ putStrLn $ "Waiting for message"
     receiveWait ([match logSlaveMessage, match (handleStartProcess mState backend) ])
