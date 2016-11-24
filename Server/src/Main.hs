@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 module Main where
@@ -9,6 +10,7 @@ import Control.Concurrent
 import Data.Map
 import Control.Exception
 import System.Environment
+import Structure.Control
 
 main :: IO ()
 main = do
@@ -46,7 +48,8 @@ echoServer endpoint serverDone = go empty
         Received cid payload -> do
           forkIO $ do
             conn <- readMVar (cs ! cid)
-            send conn payload 
+            send conn (Msg "Hi")
+            send conn Idle
             return ()
           go cs
         ConnectionClosed cid -> do 

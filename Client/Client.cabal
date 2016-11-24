@@ -24,6 +24,8 @@ executable Client
                        ,distributed-process
                        ,network-transport-tcp
                        ,network-transport
+                       ,distributed-process-simplelocalnet
+                       ,distributed-process-p2p 
                        ,binary
                        ,Shared
                        ,bytestring
