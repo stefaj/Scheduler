@@ -33,19 +33,23 @@ import Job
 logMasterMessage :: String -> Process ()
 logMasterMessage msg = say $ "Master: handling " ++ msg
 
+logResult :: Result -> Process ()
+logResult (StarRes jobId) = say $ "Master: Job succesfully started with id " ++ show jobId
+
 master backend = do
   pid <- getSelfPid
   register "master" pid
   forever $ do
     liftIO $ putStrLn "Finding slaves"
     slaves <- findSlaves backend 
-    liftIO $ putStrLn $ "Select an action:\n1 - Get current process name\n2 - Get current process time\n3 - Get current stdout\n4 - View queue\n5 - Queue process\n6 - Read file"
-    mode <- liftIO getLine
-    liftIO $ putStrLn "Input command to run"
-    prog:args <- liftIO $ words <$> getLine
-    -- redirectLogsHere backend slaves
     liftIO $ putStrLn $ "Found " ++ (show $ length slaves) ++ " slaves"
-    forM_ slaves $ \peer -> send peer $ StartProcess prog args
+    liftIO $ putStrLn $ "Select an action:\n1 - Get current process name\n2 - Get current process time\n3 - Get current stdout\n4 - View queue\n5 - Queue process\n6 - Read file\n7 - Query job status"
+    mode <- liftIO getLine
+    case mod of
+      "5" -> do 
+              liftIO $ putStrLn "Input command to run"
+              prog:args <- liftIO $ words <$> getLine
+              forM_ slaves $ \peer -> send peer $ StartProcess prog args
     liftIO $ putStrLn $ "Reading msg"
-    receiveWait ([match logMasterMessage])
+    receiveWait ([match logMasterMessage, match logResult])
     liftIO $ threadDelay 1000000
