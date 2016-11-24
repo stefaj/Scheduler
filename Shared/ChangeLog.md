@@ -1,4 +1,4 @@
-# Revision history for Scheduler
+# Revision history for Shared
 
 ## 0.1.0.0  -- YYYY-mm-dd
 
