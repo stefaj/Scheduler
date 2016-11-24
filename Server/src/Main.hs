@@ -3,45 +3,58 @@
 
 module Main where
 
-import Control.Concurrent (threadDelay)
-import Control.Monad (forever)
-import Control.Distributed.Process
-import Control.Distributed.Process.Node
+import Network.Transport
 import Network.Transport.TCP (createTransport, defaultTCPParameters)
-import Data.Binary
-import Data.Typeable
-import GHC.Generics
-
-data Job = Job {processName :: String, parameters :: [String], jobId :: Int}
-  deriving (Show, Generic, Typeable)
-
-instance Binary Job
-
-replyBack :: (ProcessId, String) -> Process ()
-replyBack (sender,msg) = send sender msg
-
-logMessage :: String -> Process ()
-logMessage msg = say $ "handling " ++ msg
-
-logJob :: Job -> Process ()
-logJob job = say $ "handling " ++ show job 
+import Control.Concurrent
+import Data.Map
+import Control.Exception
+import System.Environment
 
 main :: IO ()
 main = do
-  Right t <- createTransport "127.0.0.1" "10501" defaultTCPParameters
-  node <- newLocalNode t initRemoteTable
-  _ <- runProcess node $ do
-    echoPid <- spawnLocal $ forever $ do
-      receiveWait [match logMessage, match replyBack, match logJob]
-    say "send some msgs"
-    send echoPid "hello echo"
-    self <- getSelfPid
-    send echoPid (self, "hello!")
-    send echoPid $ Job "MultiLayer" [] 0
-    
-    m <- expectTimeout 1000000
-    case m of
-      Nothing -> die "Nothin !"
-      Just s -> say $ "got " ++ s ++ " back"
-  liftIO $ threadDelay 20000000000000
-  putStrLn "Run"
+  [host, port] <- getArgs
+  serverDone <- newEmptyMVar
+  Right transport <- createTransport host port defaultTCPParameters
+  Right endpoint <- newEndPoint transport
+  forkIO $ echoServer endpoint serverDone
+  putStrLn $ "Echo server started at " ++ (show $ address endpoint)
+  readMVar serverDone `onCtrlC` closeTransport transport
+
+
+
+onCtrlC :: IO a -> IO () -> IO a
+p `onCtrlC` q = catchJust isUserInterrupt p (const $ q >> p `onCtrlC` q)
+  where
+    isUserInterrupt :: AsyncException -> Maybe () 
+    isUserInterrupt UserInterrupt = Just ()
+    isUserInterrupt _             = Nothing
+
+
+echoServer :: EndPoint -> MVar () -> IO ()
+echoServer endpoint serverDone = go empty
+  where
+    go :: Map ConnectionId (MVar Connection) -> IO () 
+    go cs = do
+      event <- receive endpoint
+      case event of
+        ConnectionOpened cid rel addr -> do
+          connMVar <- newEmptyMVar
+          forkIO $ do
+            Right conn <- connect endpoint addr rel defaultConnectHints
+            putMVar connMVar conn 
+          go (insert cid connMVar cs) 
+        Received cid payload -> do
+          forkIO $ do
+            conn <- readMVar (cs ! cid)
+            send conn payload 
+            return ()
+          go cs
+        ConnectionClosed cid -> do 
+          forkIO $ do
+            conn <- readMVar (cs ! cid)
+            close conn 
+          go (delete cid cs) 
+        EndPointClosed -> do
+          putStrLn "Echo server exiting"
+          putMVar serverDone ()
+        _ -> go cs
