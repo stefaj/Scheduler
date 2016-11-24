@@ -24,14 +24,22 @@ main = do
   Right endpoint <- newEndPoint transport
   
   let addr = EndPointAddress (pack serverAddr)
-  Right conn <- connect endpoint addr ReliableOrdered defaultConnectHints
+  c <- connect endpoint addr ReliableOrdered defaultConnectHints
+  case c of
+    Right conn -> do 
+      send conn [pack "Hello"]
 
-  send conn [pack "Hello World"]
-  close conn
+      let echo = do 
+                  msg <- receive endpoint
+                  print msg
+                  echo
+      echo
 
-  replicateM_ 3 $ receive endpoint >>= print
-
-  closeTransport transport
+      close conn
+      closeTransport transport
+      -- msg <- receive endpoint
+      -- print msg
+    Left msg -> print msg >> print serverAddr
 
 
 -- replyBack :: (ProcessId, String) -> Process ()
