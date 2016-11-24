@@ -28,7 +28,7 @@ data Result = StartRes JobId
             | ProcessNameRes String
             | FileRes String
             | JobIdRes JobStatus
-  deriving (Show, Typable, Generic)
+  deriving (Show, Typeable, Generic)
 
 data JobStatus = Running
                | Queued
@@ -36,4 +36,6 @@ data JobStatus = Running
   deriving (Show, Typeable, Generic)
 
 instance Binary Msg
+instance Binary Result
+instance Binary JobStatus
 

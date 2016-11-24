@@ -34,7 +34,7 @@ logMasterMessage :: String -> Process ()
 logMasterMessage msg = say $ "Master: handling " ++ msg
 
 logResult :: Result -> Process ()
-logResult (StarRes jobId) = say $ "Master: Job succesfully started with id " ++ show jobId
+logResult (StartRes jobId) = say $ "Master: Job succesfully started with id " ++ show jobId
 
 master backend = do
   pid <- getSelfPid
@@ -45,7 +45,7 @@ master backend = do
     liftIO $ putStrLn $ "Found " ++ (show $ length slaves) ++ " slaves"
     liftIO $ putStrLn $ "Select an action:\n1 - Get current process name\n2 - Get current process time\n3 - Get current stdout\n4 - View queue\n5 - Queue process\n6 - Read file\n7 - Query job status"
     mode <- liftIO getLine
-    case mod of
+    case mode of
       "5" -> do 
               liftIO $ putStrLn "Input command to run"
               prog:args <- liftIO $ words <$> getLine

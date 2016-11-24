@@ -24,6 +24,7 @@ import qualified System.Process as P
 import Control.Monad 
 import Data.Maybe(catMaybes)
 import qualified Data.Sequence as S
+import Criterion.Measurement
 
 import Control.Distributed.Process
 import Control.Distributed.Process.Closure
@@ -33,32 +34,23 @@ import Control.Distributed.Process.Backend.SimpleLocalnet
 import Job
 
 data CurrentState = CurrentState {csStartTime :: Double
-                                 ,csCurProcHand :: P.ProcessHandle
+                                 ,csCurProcHand :: Maybe P.ProcessHandle
                                  ,csStdoutHand :: Maybe Handle
                                  ,csJobId :: JobId
                                  ,csJobState :: JobStatus
+                                 ,csJobCounter :: JobId
                                  ,csQueue :: S.Seq Job} 
 
-startProcess :: String -> [String] -> IO JobId
+startProcess :: MVar CurrentState -> String -> [String] -> IO JobId
 startProcess mState name args = do
    state <- takeMVar mState
-   let newJobId = 1 + (csJobId state)
-   (_,mOut,mErr,procHandle) <- P.createProcess $ 
-        (P.proc name args) { P.std_out = P.CreatePipe
-                                , P.std_err = P.CreatePipe 
-                                }
-   let (hOut,hErr) = maybe (error "bogus handles") 
-                           id
-                           ((,) <$> mOut <*> mErr)
-   t <- getTime
-   let queue' = csQueue S.|> (ProcessJob newJobId name args)
-   putMVar $ state {csStartTime = t, csCurProcHand = procHandle, 
-                   ,csStdoutHand = hOut, csJobId = newJobId,
-                   ,csQueue = queue'}
+   let newJobId = 1 + (csJobCounter state)
+   let queue' = (csQueue state) S.|> (ProcessJob newJobId name args)
+   putMVar mState $ state {csQueue = queue', csJobCounter = newJobId}
    return newJobId
 
 handleStartProcess mState backend (StartProcess name args) = do
-  newId <- liftIO $ startProcess name args
+  newId <- liftIO $ startProcess mState name args
   sendMaster backend $ StartRes newId
 
 logSlaveMessage :: String -> Process ()
@@ -86,18 +78,18 @@ slave backend = do
   liftIO $ initializeTime
   pid <- getSelfPid
   register "slaveController" pid
-  mState <- liftIO $ newMVar $ CurrentState 0 0 Nothing 0 S.empty
+  mState <- liftIO $ newMVar $ CurrentState 0 Nothing Nothing 0 Completed 0 S.empty
   forever $ do
     liftIO $ putStrLn $ "Waiting for message"
     receiveWait ([match logSlaveMessage, match (handleStartProcess mState backend) ])
     liftIO $ putStrLn $ "Waiting for next cycle"
     liftIO $ threadDelay 100000
 
-getAvailableStdOut :: Process -> IO T.Text
-getAvailableStdOut (Process _ _ _ _ (Just (ProcessData o _ _ _))) = do
-  contents <- hGetAvailableContents o
-  return $ T.pack contents
-getAvailableStdOut Process{} = return $ T.pack ""
+getAvailableStdOut :: CurrentState -> IO String
+getAvailableStdOut state = do
+  case csStdoutHand state of
+    Just hand -> hGetAvailableContents hand
+    Nothing -> return "" 
 
 hGetAvailableContents :: Handle -> IO String
 hGetAvailableContents = flip hGetAvailableContents' []
