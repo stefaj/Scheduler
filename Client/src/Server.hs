@@ -38,6 +38,10 @@ logMasterMessage msg = say $ "Master: handling " ++ msg
 logResult :: Result -> Process ()
 logResult (StartRes jobId) = say $ "Master: Job succesfully started with id " <> show jobId
 logResult (StdOutRes jobId cont) = say $ "Master: Retreiving stdout for job " <> show jobId <> "\n" <> cont
+logResult (TimeRes d) = say $ "Master: Job has been running for " ++ show d ++ " seconds"
+logResult (ProcessNameRes name) = say $ "Master: Process " ++ name ++ " is currently running"
+logResult (CurJobRes jid) = say $ "Master: Job " ++ show jid ++ " is currently running"
+logResult (JobStatRes jid stat) = say $ "Master: Job " ++ show jid ++ " has status " ++ show stat
 
 master backend = do
   pid <- getSelfPid

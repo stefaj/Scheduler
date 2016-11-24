@@ -40,6 +40,7 @@ data CurrentState = CurrentState {csStartTime :: Double
                                  ,csJobId :: JobId
                                  ,csJobState :: JobStatus
                                  ,csJobCounter :: JobId
+                                 ,csProcName :: String
                                  ,csQueue :: S.Seq Job} 
 
 startProcess :: MVar CurrentState -> JobId -> String -> [String] -> IO JobId
@@ -52,6 +53,33 @@ startProcess mState jobid name args = do
 handleMsgs mState backend (StartProcess jobid name args) = do
   newId <- liftIO $ startProcess mState jobid name args
   sendMaster backend $ StartRes newId
+
+handleMsgs mState backend GetCurrentProcessTime = do
+  state <- liftIO $ takeMVar mState
+  liftIO $ putMVar mState state
+  let t = csStartTime state 
+  t' <- liftIO getTime
+  sendMaster backend $ TimeRes (t' - t)
+
+handleMsgs mState backend GetCurrentProcessName = do
+  state <- liftIO $ takeMVar mState
+  liftIO $ putMVar mState state
+  sendMaster backend $ ProcessNameRes (csProcName state)
+
+handleMsgs mState backend GetCurrentJobId = do
+  state <- liftIO $ takeMVar mState
+  liftIO $ putMVar mState state
+  sendMaster backend $ CurJobRes (csJobId state)
+
+handleMsgs mState backend (GetJobStatus jobid) = do
+  state <- liftIO $ takeMVar mState
+  liftIO $ putMVar mState state
+  let curjid = csJobId state
+  let ans = case () of _
+                        | jobid < curjid -> Completed
+                        | jobid > curjid -> Queued
+                        | jobid == curjid -> csJobState state
+  sendMaster backend $ JobStatRes jobid ans
 
 handleMsgs mState backend (GetStdOut jobid) = do
   state <- liftIO $ takeMVar mState
@@ -91,7 +119,7 @@ slave backend = do
   liftIO $ initializeTime
   pid <- getSelfPid
   register "slaveController" pid
-  mState <- liftIO $ newMVar $ CurrentState 0 Nothing Nothing 0 Completed 0 S.empty
+  mState <- liftIO $ newMVar $ CurrentState 0 Nothing Nothing 0 Completed 0 "" S.empty
 
   -- Handle queue
   liftIO $ forkIO $ forever $ do
@@ -114,7 +142,7 @@ slave backend = do
         _ <- takeMVar mState
         putMVar mState $ state {csStartTime = t, csCurProcHand = Just procHandle
                                ,csStdoutHand = Just hOut, csJobId = pid
-                               ,csJobState = Running, csQueue = seq}
+                               ,csJobState = Running, csQueue = seq, csProcName = pname}
         putStrLn $ "Saving stdout to file"
         let filepath = "data" <> "/" <> (show pid) 
         writeFile filepath ""

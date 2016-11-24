@@ -28,11 +28,12 @@ data Msg = StartProcess {mjobId :: JobId, mProcName :: String, mProcParams :: [S
   deriving (Show, Typeable, Generic)
 
 data Result = StartRes JobId
-            | TimeRes Int
+            | TimeRes Double
             | ProcessNameRes String
             | CancelJob JobId
             | StdOutRes JobId String
-            | JobIdRes JobStatus
+            | CurJobRes JobId
+            | JobStatRes JobId JobStatus
             | ProgRes String
             | QueueRes [(JobId, String)]
   deriving (Show, Typeable, Generic)
