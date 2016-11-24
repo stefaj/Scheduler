@@ -17,8 +17,12 @@ data Job = ProcessJob {pjJobId :: JobId, pjProcName :: String, pjProcParams :: [
   deriving (Show, Typeable, Generic)
 
 data Msg = StartProcess {mProcName :: String, mProcParams :: [String]} 
-         | GetTime
-         | GetProcessName
+         | GetCurrentProcessTime
+         | GetCurrentProcessName
+         | GetCurrentStdout
+         | GetCurrentJobId
+         | GetStdOut JobId
+         | GetQueue
          | GetFile String
          | GetJobStatus JobId
   deriving (Show, Typeable, Generic)
@@ -26,14 +30,17 @@ data Msg = StartProcess {mProcName :: String, mProcParams :: [String]}
 data Result = StartRes JobId
             | TimeRes Int
             | ProcessNameRes String
-            | FileRes String
+            | CancelJob JobId
+            | StdOutRes JobId String
             | JobIdRes JobStatus
+            | ProgRes String
+            | QueueRes [(JobId, String)]
   deriving (Show, Typeable, Generic)
 
 data JobStatus = Running
                | Queued
                | Completed
-  deriving (Show, Typeable, Generic)
+  deriving (Show, Typeable, Generic, Eq)
 
 instance Binary Msg
 instance Binary Result

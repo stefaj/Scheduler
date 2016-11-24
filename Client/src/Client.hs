@@ -15,6 +15,7 @@ import Control.Monad (forever)
 -- import Control.Distributed.Process.Node
 import Data.Binary
 import Data.Typeable
+import Data.Monoid
 import qualified Data.ByteString.Char8 as BC8
 import GHC.Generics
 import System.Environment
@@ -49,9 +50,22 @@ startProcess mState name args = do
    putMVar mState $ state {csQueue = queue', csJobCounter = newJobId}
    return newJobId
 
-handleStartProcess mState backend (StartProcess name args) = do
+handleMsgs mState backend (StartProcess name args) = do
   newId <- liftIO $ startProcess mState name args
   sendMaster backend $ StartRes newId
+
+handleMsgs mState backend (GetStdOut jobid) = do
+  state <- liftIO $ takeMVar mState
+  liftIO $ putMVar mState state
+  let curJobId = csJobId state
+  case () of _
+              | jobid == curJobId && csJobState state == Completed -> do
+                  cont <- liftIO $ readFile $ "data" <> "/" <> (show jobid)
+                  sendMaster backend $ StdOutRes jobid cont
+              | jobid < curJobId -> do
+                  cont <- liftIO $ readFile $ "data" <> "/" <> (show jobid)
+                  sendMaster backend $ StdOutRes jobid cont
+              | otherwise -> sendMaster backend $ StdOutRes jobid ""
 
 logSlaveMessage :: String -> Process ()
 logSlaveMessage msg = say $ "Slave: handling " ++ msg
@@ -90,6 +104,7 @@ slave backend = do
       (ProcessJob pid pname pargs) S.:< seq -> do
         initializeTime
         t <- getTime
+        putStrLn $ "Running process " ++ pname ++ " for job " ++ show pid
         (_,mOut,mErr,procHandle) <- P.createProcess $ 
              (P.proc pname pargs) { P.std_out = P.CreatePipe
                                      , P.std_err = P.CreatePipe 
@@ -101,13 +116,17 @@ slave backend = do
         putMVar mState $ state {csStartTime = t, csCurProcHand = Just procHandle
                                ,csStdoutHand = Just hOut, csJobId = pid
                                ,csJobState = Running, csQueue = seq}
+        putStrLn $ "Saving stdout to file"
+        let filepath = "data" <> "/" <> (show pid) 
+        writeFile filepath ""
         exitCode <- P.waitForProcess procHandle
+        hGetContents hOut >>= appendFile filepath 
         state' <- takeMVar mState
         putMVar mState $ state' {csJobState = Completed}
     
   forever $ do
     liftIO $ putStrLn $ "Waiting for message"
-    receiveWait ([match logSlaveMessage, match (handleStartProcess mState backend) ])
+    receiveWait ([match logSlaveMessage, match (handleMsgs mState backend) ])
     liftIO $ putStrLn $ "Waiting for next cycle"
     liftIO $ threadDelay 100000
 
