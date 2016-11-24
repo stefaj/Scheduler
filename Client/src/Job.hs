@@ -11,8 +11,29 @@ import qualified Data.ByteString.Char8 as BC8
 import GHC.Generics
 import Control.Monad 
 
-data StartProcess = StartProcess {procName :: String, procParams :: [String]}
-  deriving (Show, Generic, Typeable)
+type JobId = Int
 
-instance Binary StartProcess
+data Job = ProcessJob {pjJobId :: JobId, pjProcName :: String, pjProcParams :: [String]}
+  deriving (Show, Typeable, Generic)
+
+data Msg = StartProcess {mProcName :: String, mProcParams :: [String]} 
+         | GetTime
+         | GetProcessName
+         | GetFile String
+         | GetJobStatus JobId
+  deriving (Show, Typeable, Generic)
+
+data Result = StartRes JobId
+            | TimeRes Int
+            | ProcessNameRes String
+            | FileRes String
+            | JobIdRes JobStatus
+  deriving (Show, Typable, Generic)
+
+data JobStatus = Running
+               | Queued
+               | Completed
+  deriving (Show, Typeable, Generic)
+
+instance Binary Msg
 
