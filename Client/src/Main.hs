@@ -25,6 +25,9 @@ import Control.Distributed.Process.Node (initRemoteTable, runProcess)
 import Control.Distributed.Process.Backend.SimpleLocalnet
 
 data StartProcess = StartProcess {procName :: String, procParams :: [String]}
+  deriving (Show, Generic)
+
+instance Binary StartProcess
 
 startProcess :: String -> [String] -> IO String
 startProcess name args = do
@@ -40,13 +43,15 @@ startProcess name args = do
    P.terminateProcess procHandle
    return sOut
 
-handleStartProcess (StartProcess name args) = do
-  liftIO $ forkIO $ do
-    return ()
+handleStartProcess backend (StartProcess name args) = do
+  res <- liftIO $ startProcess name args
+  sendMaster backend res
 
+logSlaveMessage :: String -> Process ()
+logSlaveMessage msg = say $ "Slave: handling " ++ msg
 
-logMessage :: String -> Process ()
-logMessage msg = say $ "handling " ++ msg
+logMasterMessage :: String -> Process ()
+logMasterMessage msg = say $ "Master: handling " ++ msg
 
 main = do
   [host, port, typ] <- getArgs
@@ -59,7 +64,7 @@ main = do
       runProcess node (master backend)
     "client" -> do   
       node <- newLocalNode backend
-      runProcess node slave
+      runProcess node (slave backend)
 
 sendMaster backend msg = do
   m <- findMaster backend 
@@ -86,19 +91,21 @@ master backend = do
   forever $ do
     liftIO $ putStrLn "Finding slaves"
     slaves <- findSlaves backend 
-    liftIO $ putStrLn "Redirecting logs"
+    liftIO $ putStrLn "Input command to run"
+    -- str <- liftIO $ words <$> getLine
     -- redirectLogsHere backend slaves
     liftIO $ putStrLn $ "Found " ++ (show $ length slaves) ++ " slaves"
-    forM_ slaves $ \peer -> send peer "hi"
-    liftIO $ putStrLn $ "Waiting for next cycle"
+    forM_ slaves $ \peer -> send peer $ StartProcess "ls" []  -- (head str) (tail str)
+    liftIO $ putStrLn $ "Reading msg"
+    receiveWait ([match logMasterMessage])
     liftIO $ threadDelay 10000000
     
 
-slave = do
+slave backend = do
   pid <- getSelfPid
   register "slaveController" pid
   forever $ do
     liftIO $ putStrLn $ "Waiting for message"
-    receiveWait ([match logMessage])
+    receiveWait ([match logSlaveMessage, match (handleStartProcess backend) ])
     liftIO $ putStrLn $ "Waiting for next cycle"
     liftIO $ threadDelay 10000000
