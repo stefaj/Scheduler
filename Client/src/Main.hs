@@ -14,13 +14,17 @@ import Data.ByteString.Char8
 import GHC.Generics
 import System.Environment
 import Control.Monad 
-import Structure.Job
-import Structure.Control
 
 import Control.Distributed.Process
 import Control.Distributed.Process.Closure
 import Control.Distributed.Process.Node (initRemoteTable, runProcess)
 import Control.Distributed.Process.Backend.SimpleLocalnet
+
+data StartProcess = StartProcess {procName :: String, procParams :: [String]}
+
+handleStartProcess (StartProcess name args) = do
+  forkIO
+
 
 logMessage :: String -> Process ()
 logMessage msg = say $ "handling " ++ msg
@@ -38,6 +42,24 @@ main = do
     "client" -> do   
       node <- newLocalNode backend
       runProcess node slave
+
+sendMaster backend msg = do
+  m <- findMaster backend 
+  send m msg
+
+findMaster :: Backend -> Process ProcessId
+findMaster backend = do
+  nodes <- liftIO $ findPeers backend 1000000
+  bracket
+   (mapM monitorNode nodes)
+   (mapM unmonitor)
+   $ \_ -> do
+   forM_ nodes $ \nid -> whereisRemoteAsync nid "master"
+   head <$> catMaybes <$> replicateM (length nodes) (
+     receiveWait
+       [ match (\(WhereIsReply "master" mPid) -> return mPid)
+       , match (\(NodeMonitorNotification {}) -> return Nothing)
+       ])
 
   
 master backend = do
