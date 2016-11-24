@@ -10,12 +10,10 @@ import Control.Distributed.Process.Node
 import Network.Transport.TCP (createTransport, defaultTCPParameters)
 import Data.Binary
 import Data.Typeable
+import Data.ByteString.Char8
 import GHC.Generics
-
-data Job = Job {processName :: String, parameters :: [String], jobId :: Int}
-  deriving (Show, Generic, Typeable)
-
-instance Binary Job
+import System.Environment
+import Structure.Job
 
 replyBack :: (ProcessId, String) -> Process ()
 replyBack (sender,msg) = send sender msg
@@ -44,4 +42,4 @@ main = do
       Nothing -> die "Nothin !"
       Just s -> say $ "got " ++ s ++ " back"
   liftIO $ threadDelay 20000000000000
-  putStrLn "Run"
+  Prelude.putStrLn "Run"

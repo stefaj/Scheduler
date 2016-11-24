@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
 stack install .
-stack exec -- Scheduler
+stack exec -- Client
