@@ -10,6 +10,7 @@ import Data.Typeable
 import qualified Data.ByteString.Char8 as BC8
 import GHC.Generics
 import Control.Monad 
+import Control.Distributed.Process
 
 type JobId = Int
 
@@ -25,6 +26,10 @@ data Msg = StartProcess {mjobId :: JobId, mProcName :: String, mProcParams :: [S
          | GetQueue
          | GetFile String
          | GetJobStatus JobId
+  deriving (Show, Typeable, Generic)
+
+data Ping = PingRequest
+          | PingReply NodeId
   deriving (Show, Typeable, Generic)
 
 data Result = StartRes JobId
@@ -46,4 +51,5 @@ data JobStatus = Running
 instance Binary Msg
 instance Binary Result
 instance Binary JobStatus
+instance Binary Ping
 

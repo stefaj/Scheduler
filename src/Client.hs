@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -27,6 +28,7 @@ import Data.Maybe(catMaybes)
 import qualified Data.Sequence as S
 import Criterion.Measurement
 
+import Network.Transport (EndPointAddress(..))
 import Control.Distributed.Process
 import Control.Distributed.Process.Closure
 import Control.Distributed.Process.Node (initRemoteTable, runProcess)
@@ -50,28 +52,28 @@ startProcess mState jobid name args = do
    putMVar mState $ state {csQueue = queue', csJobCounter = jobid}
    return jobid
 
-handleMsgs mState backend (StartProcess jobid name args) = do
+handleMsgs mState backend remoteHost remotePort (StartProcess jobid name args) = do
   newId <- liftIO $ startProcess mState jobid name args
-  sendMaster backend $ StartRes newId
+  sendMaster backend remoteHost remotePort $ StartRes newId
 
-handleMsgs mState backend GetCurrentProcessTime = do
+handleMsgs mState backend remoteHost remotePort GetCurrentProcessTime = do
   state <- liftIO $ takeMVar mState
   liftIO $ putMVar mState state
   let t = csStartTime state 
   t' <- liftIO getTime
-  sendMaster backend $ TimeRes (t' - t)
+  sendMaster backend remoteHost remotePort $ TimeRes (t' - t)
 
-handleMsgs mState backend GetCurrentProcessName = do
+handleMsgs mState backend remoteHost remotePort GetCurrentProcessName = do
   state <- liftIO $ takeMVar mState
   liftIO $ putMVar mState state
-  sendMaster backend $ ProcessNameRes (csProcName state)
+  sendMaster backend remoteHost remotePort$ ProcessNameRes (csProcName state)
 
-handleMsgs mState backend GetCurrentJobId = do
+handleMsgs mState backend remoteHost remotePort GetCurrentJobId = do
   state <- liftIO $ takeMVar mState
   liftIO $ putMVar mState state
-  sendMaster backend $ CurJobRes (csJobId state)
+  sendMaster backend remoteHost remotePort $ CurJobRes (csJobId state)
 
-handleMsgs mState backend (GetJobStatus jobid) = do
+handleMsgs mState backend remoteHost remotePort (GetJobStatus jobid) = do
   state <- liftIO $ takeMVar mState
   liftIO $ putMVar mState state
   let curjid = csJobId state
@@ -79,47 +81,38 @@ handleMsgs mState backend (GetJobStatus jobid) = do
                         | jobid < curjid -> Completed
                         | jobid > curjid -> Queued
                         | jobid == curjid -> csJobState state
-  sendMaster backend $ JobStatRes jobid ans
+  sendMaster backend remoteHost remotePort $ JobStatRes jobid ans
 
-handleMsgs mState backend (GetStdOut jobid) = do
+handleMsgs mState backend remoteHost remotePort (GetStdOut jobid) = do
   state <- liftIO $ takeMVar mState
   liftIO $ putMVar mState state
   let curJobId = csJobId state
   case () of _
               | jobid == curJobId && csJobState state == Completed -> do
                   cont <- liftIO $ readFile $ "data" <> "/" <> (show jobid)
-                  sendMaster backend $ StdOutRes jobid cont
+                  sendMaster backend remoteHost remotePort $ StdOutRes jobid cont
               | jobid < curJobId -> do
                   cont <- liftIO $ readFile $ "data" <> "/" <> (show jobid)
-                  sendMaster backend $ StdOutRes jobid cont
-              | otherwise -> sendMaster backend $ StdOutRes jobid ""
+                  sendMaster backend remoteHost remotePort $ StdOutRes jobid cont
+              | otherwise -> sendMaster backend remoteHost remotePort $ StdOutRes jobid ""
 
 logSlaveMessage :: String -> Process ()
 logSlaveMessage msg = say $ "Slave: handling " ++ msg
 
-sendMaster backend msg = do
-  m <- findMaster backend 
-  send m msg
+sendMaster backend remoteHost remotePort msg = do
+  let addr = remoteHost <> ":" <> remotePort
+  let remoteNode = NodeId . EndPointAddress . BC8.concat $ [BC8.pack addr, ":0"]
+  nsendRemote remoteNode "master" msg
+  -- send m msg
 
-findMaster :: Backend -> Process ProcessId
-findMaster backend = do
-  nodes <- liftIO $ findPeers backend 1000000
-  bracket
-   (mapM monitorNode nodes)
-   (mapM unmonitor)
-   $ \_ -> do
-   forM_ nodes $ \nid -> whereisRemoteAsync nid "master"
-   head <$> catMaybes <$> replicateM (length nodes) (
-     receiveWait
-       [ match (\(WhereIsReply "master" mPid) -> return mPid)
-       , match (\(NodeMonitorNotification {}) -> return Nothing)
-       ])
-
-slave backend = do
+slave backend remoteHost remotePort = do
   liftIO $ initializeTime
   pid <- getSelfPid
+  node <- getSelfNode
   register "slaveController" pid
   mState <- liftIO $ newMVar $ CurrentState 0 Nothing Nothing 0 Completed 0 "" S.empty
+
+  sendMaster backend remoteHost remotePort (PingReply node)
 
   -- Handle queue
   liftIO $ forkIO $ forever $ do
@@ -153,7 +146,7 @@ slave backend = do
     
   forever $ do
     liftIO $ putStrLn $ "Waiting for message"
-    receiveWait ([match logSlaveMessage, match (handleMsgs mState backend) ])
+    receiveWait ([match logSlaveMessage, match (handleMsgs mState backend remoteHost remotePort) ])
     liftIO $ putStrLn $ "Waiting for next cycle"
     liftIO $ threadDelay 100000
 
