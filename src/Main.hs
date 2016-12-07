@@ -27,24 +27,19 @@ import Control.Distributed.Process.Closure
 import Control.Distributed.Process.Node (initRemoteTable, runProcess, forkProcess)
 import Control.Distributed.Process.Backend.SimpleLocalnet
 
-import Client
-import Server
-import Job
+import Scheduler.Client
+import Scheduler.Server
+import Scheduler.Job
 
 main = do
   args <- getArgs
   case head args of
     "server" -> do 
       let [_, localHost, localPort] = args
-      backend <- initializeBackend localHost localPort initRemoteTable
-      putStrLn "start server node"
-      node <- newLocalNode backend
-      putStrLn "Starting master process"
-      mPeers <- liftIO $ newMVar S.empty
-      _ <- forkProcess node $ updateSlaves mPeers
-      runProcess node (master backend mPeers)
+      startServer localHost localPort
     "client" -> do   
       let [_, localHost, localPort, remoteHost, remotePort] = args
       backend <- initializeBackend localHost localPort initRemoteTable
       node <- newLocalNode backend
       runProcess node (slave backend remoteHost remotePort)
+

@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Client (
+module Scheduler.Client (
     slave
   )
   where
@@ -34,7 +34,7 @@ import Control.Distributed.Process.Closure
 import Control.Distributed.Process.Node (initRemoteTable, runProcess)
 import Control.Distributed.Process.Backend.SimpleLocalnet
 
-import Job
+import Scheduler.Job
 
 data CurrentState = CurrentState {csStartTime :: Double
                                  ,csCurProcHand :: Maybe P.ProcessHandle

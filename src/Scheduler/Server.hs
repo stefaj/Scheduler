@@ -3,9 +3,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Server (
+module Scheduler.Server (
     master
     ,updateSlaves
+    ,startServer
   )
   where
 
@@ -32,7 +33,7 @@ import Control.Distributed.Process.Closure
 import Control.Distributed.Process.Node (initRemoteTable, runProcess, forkProcess)
 import Control.Distributed.Process.Backend.SimpleLocalnet
 
-import Job
+import Scheduler.Job
 
 logMasterMessage :: String -> Process ()
 logMasterMessage msg = say $ "Master: handling " ++ msg
@@ -108,3 +109,13 @@ master backend mPeers = do
       "10" -> return ()
 
     liftIO $ threadDelay 1000000
+
+
+startServer localHost localPort = do
+  backend <- initializeBackend localHost localPort initRemoteTable
+  putStrLn "start server node"
+  node <- newLocalNode backend
+  putStrLn "Starting master process"
+  mPeers <- liftIO $ newMVar S.empty
+  _ <- forkProcess node $ updateSlaves mPeers
+  runProcess node (master backend mPeers)

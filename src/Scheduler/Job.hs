@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Job where
+module Scheduler.Job where
 
 import Data.Binary
 import Data.Typeable
