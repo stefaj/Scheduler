@@ -7,6 +7,7 @@ module Scheduler.Server (
     master
     ,updateSlaves
     ,startServer
+    ,logResult
   )
   where
 
@@ -56,13 +57,12 @@ sendSlaves mPeers msg = do
   liftIO $ putMVar mPeers slaves
   forM_ slaves $ \slaveNode -> nsendRemote slaveNode "slaveController" msg
 
-
-updateSlaves mPeers = do 
+updateSlaves mPeers receiveResult = do 
   pid <- getSelfPid
   register "master" pid
   forever $ do
     liftIO $ putStrLn $ "Reading msg"
-    receiveWait ([match logMasterMessage, match logResult, match $ pingResult mPeers])
+    receiveWait ([match logMasterMessage, match receiveResult , match $ pingResult mPeers])
   -- receiveWait [match (pingResult mPeers)] 
 
 master backend mPeers = do
@@ -111,11 +111,11 @@ master backend mPeers = do
     liftIO $ threadDelay 1000000
 
 
-startServer localHost localPort = do
+startServer localHost localPort receiveResult = do
   backend <- initializeBackend localHost localPort initRemoteTable
   putStrLn "start server node"
   node <- newLocalNode backend
   putStrLn "Starting master process"
   mPeers <- liftIO $ newMVar S.empty
-  _ <- forkProcess node $ updateSlaves mPeers
+  _ <- forkProcess node $ updateSlaves mPeers receiveResult
   runProcess node (master backend mPeers)

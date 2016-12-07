@@ -36,7 +36,7 @@ main = do
   case head args of
     "server" -> do 
       let [_, localHost, localPort] = args
-      startServer localHost localPort
+      startServer localHost localPort logResult
     "client" -> do   
       let [_, localHost, localPort, remoteHost, remotePort] = args
       backend <- initializeBackend localHost localPort initRemoteTable

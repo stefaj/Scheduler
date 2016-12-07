@@ -112,7 +112,11 @@ slave backend remoteHost remotePort = do
   register "slaveController" pid
   mState <- liftIO $ newMVar $ CurrentState 0 Nothing Nothing 0 Completed 0 "" S.empty
 
+  liftIO $ putStrLn "Sending ping"
+  liftIO $ threadDelay 1000000
   sendMaster backend remoteHost remotePort (PingReply node)
+  liftIO $ threadDelay 1000000
+  liftIO $ putStrLn "Sent ping"
 
   -- Handle queue
   liftIO $ forkIO $ forever $ do
