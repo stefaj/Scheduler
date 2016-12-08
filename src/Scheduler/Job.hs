@@ -36,6 +36,8 @@ data Result = StartRes JobId
             | TimeRes Double
             | ProcessNameRes String
             | CancelJob JobId
+            | JobStarted JobId
+            | JobCompleted JobId Bool -- job success
             | StdOutRes JobId String
             | CurJobRes JobId
             | JobStatRes JobId JobStatus
@@ -46,6 +48,7 @@ data Result = StartRes JobId
 data JobStatus = Running
                | Queued
                | Completed
+               | Failed
   deriving (Show, Typeable, Generic, Eq)
 
 instance Binary Msg

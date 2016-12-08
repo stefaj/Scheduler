@@ -23,6 +23,7 @@ import System.Environment
 import System.IO
 import System.Timeout
 import qualified System.Process as P
+import System.Exit
 import Control.Monad 
 import Data.Maybe(catMaybes)
 import qualified Data.Sequence as S
@@ -105,7 +106,7 @@ sendMaster backend remoteHost remotePort msg = do
   nsendRemote remoteNode "master" msg
   -- send m msg
 
-slave backend remoteHost remotePort = do
+slave localNode backend remoteHost remotePort = do
   liftIO $ initializeTime
   pid <- getSelfPid
   node <- getSelfNode
@@ -129,6 +130,9 @@ slave backend remoteHost remotePort = do
         initializeTime
         t <- getTime
         putStrLn $ "Running process " ++ pname ++ " for job " ++ show pid
+
+        runProcess localNode $ sendMaster backend remoteHost remotePort (JobStarted pid)
+
         (_,mOut,mErr,procHandle) <- P.createProcess $ 
              (P.proc pname pargs) { P.std_out = P.CreatePipe
                                      , P.std_err = P.CreatePipe 
@@ -144,6 +148,9 @@ slave backend remoteHost remotePort = do
         let filepath = "data" <> "/" <> (show pid) 
         writeFile filepath ""
         exitCode <- P.waitForProcess procHandle
+
+        runProcess localNode $ sendMaster backend remoteHost remotePort (JobCompleted pid (exitCode == ExitSuccess))
+
         hGetContents hOut >>= appendFile filepath 
         state' <- takeMVar mState
         putMVar mState $ state' {csJobState = Completed}

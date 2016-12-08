@@ -41,5 +41,5 @@ main = do
       let [_, localHost, localPort, remoteHost, remotePort] = args
       backend <- initializeBackend localHost localPort initRemoteTable
       node <- newLocalNode backend
-      runProcess node (slave backend remoteHost remotePort)
+      runProcess node (slave node backend remoteHost remotePort)
 
