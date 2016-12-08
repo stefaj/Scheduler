@@ -117,5 +117,6 @@ startServer localHost localPort receiveResult = do
   node <- newLocalNode backend
   putStrLn "Starting master process"
   mPeers <- liftIO $ newMVar S.empty
-  _ <- forkProcess node $ updateSlaves mPeers receiveResult
-  runProcess node (master backend mPeers)
+  -- _ <- forkProcess node $ updateSlaves mPeers receiveResult
+  --runProcess node (master backend mPeers)
+  runProcess node (updateSlaves mPeers logResult)
