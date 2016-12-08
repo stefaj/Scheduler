@@ -121,7 +121,7 @@ slave localNode backend remoteHost remotePort = do
 
   -- Handle queue
   liftIO $ forkIO $ forever $ do
-    threadDelay 1000000
+    threadDelay 2000000
     state <- takeMVar mState
     putMVar mState state
     case S.viewl (csQueue state) of
@@ -144,22 +144,22 @@ slave localNode backend remoteHost remotePort = do
         putMVar mState $ state {csStartTime = t, csCurProcHand = Just procHandle
                                ,csStdoutHand = Just hOut, csJobId = pid
                                ,csJobState = Running, csQueue = seq, csProcName = pname}
-        putStrLn $ "Saving stdout to file"
         let filepath = "data" <> "/" <> (show pid) 
-        writeFile filepath ""
+        -- writeFile filepath ""
         exitCode <- P.waitForProcess procHandle
 
         runProcess localNode $ sendMaster backend remoteHost remotePort (JobCompleted pid (exitCode == ExitSuccess))
 
-        hGetContents hOut >>= appendFile filepath 
+        putStrLn $ "Saving stdout to file"
+        hGetContents hOut >>= writeFile filepath 
         state' <- takeMVar mState
-        putMVar mState $ state' {csJobState = Completed}
+        putMVar mState $ state' {csJobState = Completed, csQueue = seq}
     
   forever $ do
     liftIO $ putStrLn $ "Waiting for message"
     receiveWait ([match logSlaveMessage, match (handleMsgs mState backend remoteHost remotePort) ])
     liftIO $ putStrLn $ "Waiting for next cycle"
-    liftIO $ threadDelay 100000
+    liftIO $ threadDelay 2000000
 
 getAvailableStdOut :: CurrentState -> IO String
 getAvailableStdOut state = do
