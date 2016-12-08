@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                Scheduler
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            Comonoids and distributive process scheduling
 -- description:         
 homepage:            http://github.com/stefan-j/Scheduler

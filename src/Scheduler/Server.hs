@@ -6,6 +6,7 @@
 module Scheduler.Server (
     master
     ,updateSlaves
+    ,sendSlaves
     ,startServer
     ,logResult
   )
