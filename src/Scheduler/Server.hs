@@ -9,6 +9,8 @@ module Scheduler.Server (
     ,sendSlaves
     ,startServer
     ,logResult
+    ,getPeers
+    ,Env
   )
   where
 
@@ -37,6 +39,9 @@ import Control.Distributed.Process.Backend.SimpleLocalnet
 
 import Scheduler.Job
 
+data Env = Env {peers :: S.Set NodeId, requestedStdOut :: String}
+type Environment = MVar Env
+
 logMasterMessage :: String -> Process ()
 logMasterMessage msg = say $ "Master: handling " ++ msg
 
@@ -48,65 +53,70 @@ logResult (ProcessNameRes name) = say $ "Master: Process " ++ name ++ " is curre
 logResult (CurJobRes jid) = say $ "Master: Job " ++ show jid ++ " is currently running"
 logResult (JobStatRes jid stat) = say $ "Master: Job " ++ show jid ++ " has status " ++ show stat
 
-pingResult mPeers (PingReply nodeId) = do
-  say $ "Peer connected: " ++ show nodeId
-  peers <- liftIO $ takeMVar mPeers
-  liftIO $ putMVar mPeers $ S.insert nodeId peers
+getPeers :: Environment -> IO (S.Set NodeId)
+getPeers env = do
+  e <- takeMVar env
+  putMVar env e
+  return $ peers e
 
-sendSlaves mPeers msg = do 
-  slaves <- liftIO $ takeMVar mPeers
-  liftIO $ putMVar mPeers slaves
+addPeer :: Environment -> NodeId -> IO ()
+addPeer env nodeId = do
+  e <- takeMVar env
+  putMVar env $ e {peers = S.insert nodeId (peers e)}
+
+pingResult env (PingReply nodeId) = do
+  say $ "Peer connected: " ++ show nodeId
+  liftIO $ addPeer env nodeId
+
+sendSlaves env msg = do 
+  slaves <- liftIO $ getPeers env
   forM_ slaves $ \slaveNode -> nsendRemote slaveNode "slaveController" msg
 
-updateSlaves mPeers receiveResult = do 
+updateSlaves env receiveResult = do 
   pid <- getSelfPid
   register "master" pid
   forever $ do
     liftIO $ putStrLn $ "Reading msg"
-    receiveWait ([match logMasterMessage, match receiveResult , match $ pingResult mPeers])
-  -- receiveWait [match (pingResult mPeers)] 
+    receiveWait ([match logMasterMessage, match receiveResult , match $ pingResult env])
 
-master backend mPeers = do
+master backend env = do
   mJobCount <- liftIO $ newMVar (0 :: Int)
-
   node <- getSelfNode
-
   forever $ do
     liftIO $ putStrLn "Finding slaves"
-    slaves <- liftIO $ takeMVar mPeers
-    liftIO $ putMVar mPeers slaves
+    slaves <- liftIO $ getPeers env
     liftIO $ putStrLn $ "Found " ++ (show $ length slaves) ++ " slaves"
     liftIO $ putStrLn $ "Select an action:\n1 - Get current process name\n2 - Get current process time\n3 - Get current stdout"
                        ++"\n4 - Get current job id\n5 - View queue\n6 - Queue process\n7 - Read file\n8 - Query job status\n9 - Get stdout for job\n10 - Refresh"
     mode <- liftIO getLine
     case mode of
-      "1" -> sendSlaves mPeers $ GetCurrentProcessName
-      "2" -> sendSlaves mPeers $ GetCurrentProcessTime
-      "3" -> sendSlaves mPeers $ GetCurrentStdout
-      "4" -> sendSlaves mPeers $ GetCurrentJobId
-      "5" -> sendSlaves mPeers $ GetQueue
+      "1" -> sendSlaves env $ GetCurrentProcessName
+      "2" -> sendSlaves env $ GetCurrentProcessTime
+      "3" -> sendSlaves env $ GetCurrentStdout
+      "4" -> sendSlaves env $ GetCurrentJobId
+      "5" -> sendSlaves env $ GetQueue
       "6" -> do 
               liftIO $ putStrLn "Input command to run"
               jobId <- liftIO $ takeMVar mJobCount
               let jobId' = jobId + 1
               liftIO $ putMVar mJobCount jobId'
               prog:args <- liftIO $ words <$> getLine
-              sendSlaves mPeers $ StartProcess jobId' prog args
+              sendSlaves env $ StartProcess jobId' prog args
       "7" -> do 
               liftIO $ putStrLn "Enter filename to be read"
               jobId <- liftIO $ takeMVar mJobCount
               let jobId' = jobId + 1
               liftIO $ putMVar mJobCount jobId'
               filename <- liftIO getLine
-              sendSlaves mPeers $ StartProcess jobId' "cat" [filename]
+              sendSlaves env $ StartProcess jobId' "cat" [filename]
       "8" -> do
               liftIO $ putStrLn "Enter job id"
               jid <- liftIO $ read <$> getLine
-              sendSlaves mPeers $ GetJobStatus jid
+              sendSlaves env $ GetJobStatus jid
       "9" -> do
               liftIO $ putStrLn "Enter job id"
               jid <- liftIO $ read <$> getLine
-              sendSlaves mPeers $ GetStdOut jid
+              sendSlaves env $ GetStdOut jid
       "10" -> return ()
 
     liftIO $ threadDelay 1000000
@@ -117,7 +127,7 @@ startServer localHost localPort receiveResult = do
   putStrLn "start server node"
   node <- newLocalNode backend
   putStrLn "Starting master process"
-  mPeers <- liftIO $ newMVar S.empty
+  env <- liftIO $ newMVar $ Env {peers = S.empty, requestedStdOut = ""}
   -- _ <- forkProcess node $ updateSlaves mPeers receiveResult
   --runProcess node (master backend mPeers)
-  runProcess node (updateSlaves mPeers logResult)
+  runProcess node (updateSlaves env logResult)
