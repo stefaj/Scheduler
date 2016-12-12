@@ -97,6 +97,20 @@ handleMsgs mState backend remoteHost remotePort (GetStdOut jobid) = do
                   sendMaster backend remoteHost remotePort $ StdOutRes jobid cont
               | otherwise -> sendMaster backend remoteHost remotePort $ StdOutRes jobid ""
 
+handleSyncMsgs mState backend remoteHost remotePort (SyncGetStdOut jobid) = do
+  state <- liftIO $ takeMVar mState
+  liftIO $ putMVar mState state
+  let curJobId = csJobId state
+  case () of _
+              | jobid == curJobId && csJobState state == Completed -> do
+                  cont <- liftIO $ readFile $ "data" <> "/" <> (show jobid)
+                  sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid cont
+              | jobid < curJobId -> do
+                  cont <- liftIO $ readFile $ "data" <> "/" <> (show jobid)
+                  sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid cont
+              | otherwise -> sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid ""
+
+
 logSlaveMessage :: String -> Process ()
 logSlaveMessage msg = say $ "Slave: handling " ++ msg
 

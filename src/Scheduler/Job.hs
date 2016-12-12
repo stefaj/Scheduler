@@ -28,6 +28,9 @@ data Msg = StartProcess {mjobId :: JobId, mProcName :: String, mProcParams :: [S
          | GetJobStatus JobId
   deriving (Show, Typeable, Generic)
 
+data SyncMsg = SyncGetStdOut JobId
+  deriving (Show, Typeable, Generic)
+
 data Ping = PingRequest
           | PingReply NodeId
   deriving (Show, Typeable, Generic)
@@ -45,6 +48,9 @@ data Result = StartRes JobId
             | QueueRes [(JobId, String)]
   deriving (Show, Typeable, Generic)
 
+data SyncStdOutRes = SyncStdOutRes JobId String
+  deriving (Show, Typeable, Generic)
+
 data JobStatus = Running
                | Queued
                | Completed
@@ -52,7 +58,8 @@ data JobStatus = Running
   deriving (Show, Typeable, Generic, Eq)
 
 instance Binary Msg
+instance Binary SyncMsg
 instance Binary Result
 instance Binary JobStatus
 instance Binary Ping
-
+instance Binary SyncStdOutRes
