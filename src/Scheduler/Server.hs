@@ -10,7 +10,9 @@ module Scheduler.Server (
     ,startServer
     ,logResult
     ,getPeers
+    ,createEmptyEnv
     ,Env
+    ,Environment
   )
   where
 
@@ -52,6 +54,9 @@ logResult (TimeRes d) = say $ "Master: Job has been running for " ++ show d ++ "
 logResult (ProcessNameRes name) = say $ "Master: Process " ++ name ++ " is currently running"
 logResult (CurJobRes jid) = say $ "Master: Job " ++ show jid ++ " is currently running"
 logResult (JobStatRes jid stat) = say $ "Master: Job " ++ show jid ++ " has status " ++ show stat
+
+createEmptyEnv :: IO Environment
+createEmptyEnv = liftIO $ newMVar $ Env {peers = S.empty, requestedStdOut = ""}
 
 getPeers :: Environment -> IO (S.Set NodeId)
 getPeers env = do
@@ -127,7 +132,7 @@ startServer localHost localPort receiveResult = do
   putStrLn "start server node"
   node <- newLocalNode backend
   putStrLn "Starting master process"
-  env <- liftIO $ newMVar $ Env {peers = S.empty, requestedStdOut = ""}
+  env <- createEmptyEnv 
   -- _ <- forkProcess node $ updateSlaves mPeers receiveResult
   --runProcess node (master backend mPeers)
   runProcess node (updateSlaves env logResult)
