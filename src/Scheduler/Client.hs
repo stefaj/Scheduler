@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Scheduler.Client (
     slave
@@ -12,8 +13,7 @@ module Scheduler.Client (
 import Control.Concurrent (threadDelay, forkIO)
 import Control.Concurrent.MVar
 import Control.Monad (forever)
--- import Control.Distributed.Process
--- import Control.Distributed.Process.Node
+import qualified Control.Exception as E
 import Data.Binary
 import Data.Typeable
 import Data.Monoid
@@ -102,9 +102,12 @@ handleMsgs mState backend remoteHost remotePort (SyncGetStdOut jobid) = do
   liftIO $ putStrLn "Getting sync stdout"
   let filepath = "data" <> "/" <> (show jobid)
   exist <- liftIO $ doesFileExist filepath
+  liftIO $ putStrLn $ "File " ++ filepath ++ " does " ++ if exist then "exist" else "not exist"
   if exist then do cont <- liftIO $ readFile filepath
-                   sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid cont
-           else sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid ""
+                   liftIO $ putStrLn "Sending read data back"
+                   sendStdout backend remoteHost remotePort $ SyncStdOutRes jobid cont
+                   liftIO $ threadDelay 100000
+           else sendStdout backend remoteHost remotePort $ SyncStdOutRes jobid ""
 
 
 logSlaveMessage :: String -> Process ()
@@ -114,7 +117,11 @@ sendMaster backend remoteHost remotePort msg = do
   let addr = remoteHost <> ":" <> remotePort
   let remoteNode = NodeId . EndPointAddress . BC8.concat $ [BC8.pack addr, ":0"]
   nsendRemote remoteNode "master" msg
-  -- send m msg
+
+sendStdout backend remoteHost remotePort msg = do
+  let addr = remoteHost <> ":" <> remotePort
+  let remoteNode = NodeId . EndPointAddress . BC8.concat $ [BC8.pack addr, ":0"]
+  nsendRemote remoteNode "stdout" msg
 
 slave localNode backend remoteHost remotePort = do
   liftIO $ initializeTime
@@ -193,7 +200,7 @@ hGetAvailableContents :: Handle -> IO String
 hGetAvailableContents = flip hGetAvailableContents' []
 hGetAvailableContents' :: Handle -> String -> IO String
 hGetAvailableContents' h buff = do
-  r <- hReady h
+  r <- (hReady h) `E.catch` (\(e::IOError) -> return False) 
   if r then do
     c <- hGetChar h
     hGetAvailableContents' h (c:buff)
