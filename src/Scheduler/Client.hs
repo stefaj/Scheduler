@@ -24,6 +24,7 @@ import System.IO
 import System.Timeout
 import qualified System.Process as P
 import System.Exit
+import System.Directory
 import Control.Monad 
 import Data.Maybe(catMaybes)
 import qualified Data.Sequence as S
@@ -97,18 +98,13 @@ handleMsgs mState backend remoteHost remotePort (GetStdOut jobid) = do
                   sendMaster backend remoteHost remotePort $ StdOutRes jobid cont
               | otherwise -> sendMaster backend remoteHost remotePort $ StdOutRes jobid ""
 
-handleSyncMsgs mState backend remoteHost remotePort (SyncGetStdOut jobid) = do
-  state <- liftIO $ takeMVar mState
-  liftIO $ putMVar mState state
-  let curJobId = csJobId state
-  case () of _
-              | jobid == curJobId && csJobState state == Completed -> do
-                  cont <- liftIO $ readFile $ "data" <> "/" <> (show jobid)
-                  sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid cont
-              | jobid < curJobId -> do
-                  cont <- liftIO $ readFile $ "data" <> "/" <> (show jobid)
-                  sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid cont
-              | otherwise -> sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid ""
+handleMsgs mState backend remoteHost remotePort (SyncGetStdOut jobid) = do
+  liftIO $ putStrLn "Getting sync stdout"
+  let filepath = "data" <> "/" <> (show jobid)
+  exist <- liftIO $ doesFileExist filepath
+  if exist then do cont <- liftIO $ readFile filepath
+                   sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid cont
+           else sendMaster backend remoteHost remotePort $ SyncStdOutRes jobid ""
 
 
 logSlaveMessage :: String -> Process ()
