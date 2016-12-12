@@ -131,6 +131,9 @@ slave localNode backend remoteHost remotePort = do
         t <- getTime
         putStrLn $ "Running process " ++ pname ++ " for job " ++ show pid
 
+        let filepath = "data" <> "/" <> (show pid) 
+        writeFile filepath ""
+
         runProcess localNode $ sendMaster backend remoteHost remotePort (JobStarted pid)
 
         (_,mOut,mErr,procHandle) <- P.createProcess $ 
@@ -141,17 +144,26 @@ slave localNode backend remoteHost remotePort = do
                                 id
                                 ((,) <$> mOut <*> mErr)
         _ <- takeMVar mState
-        putMVar mState $ state {csStartTime = t, csCurProcHand = Just procHandle
+        let st = state {csStartTime = t, csCurProcHand = Just procHandle
                                ,csStdoutHand = Just hOut, csJobId = pid
                                ,csJobState = Running, csQueue = seq, csProcName = pname}
-        let filepath = "data" <> "/" <> (show pid) 
-        -- writeFile filepath ""
-        exitCode <- P.waitForProcess procHandle
+        putMVar mState st
+
+        let loop = do
+                     exitCode <- P.getProcessExitCode procHandle
+                     case exitCode of
+                         Just eCode -> do 
+                           getAvailableStdOut st >>= appendFile filepath
+                           return eCode
+                         Nothing -> do
+                           getAvailableStdOut st >>= appendFile filepath
+                           threadDelay 1000000
+                           loop
+
+        exitCode <- loop
 
         runProcess localNode $ sendMaster backend remoteHost remotePort (JobCompleted pid (exitCode == ExitSuccess))
 
-        putStrLn $ "Saving stdout to file"
-        hGetContents hOut >>= writeFile filepath 
         state' <- takeMVar mState
         putMVar mState $ state' {csJobState = Completed, csQueue = seq}
     
